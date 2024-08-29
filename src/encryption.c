@@ -176,17 +176,22 @@ int decrypt(const uint8_t *secret_key, size_t secret_key_len,
     OQS_KEM *kem = NULL;
     EVP_CIPHER_CTX *ctx = NULL;
     uint8_t *shared_secret = NULL;
-    uint8_t *aes_ciphertext = NULL;
     uint8_t iv[GCM_IV_SIZE];
     uint8_t tag[GCM_TAG_SIZE];
     int len;
     int ret = -1;
 
+    printf("Debug: Initializing KEM\n");
     kem = OQS_KEM_new(OQS_KEM_alg_kyber_768);
     if (kem == NULL) {
         set_error("Error creating KEM instance");
         return ret;
     }
+
+    printf("Debug: Checking key and ciphertext lengths\n");
+    printf("Debug: secret_key_len: %zu, kem->length_secret_key: %zu\n", secret_key_len, kem->length_secret_key);
+    printf("Debug: ciphertext_len: %zu, kem->length_ciphertext: %zu, GCM_IV_SIZE: %d, GCM_TAG_SIZE: %d\n",
+           ciphertext_len, kem->length_ciphertext, GCM_IV_SIZE, GCM_TAG_SIZE);
 
     if (secret_key_len != kem->length_secret_key ||
         ciphertext_len <= kem->length_ciphertext + GCM_IV_SIZE + GCM_TAG_SIZE) {
@@ -194,41 +199,42 @@ int decrypt(const uint8_t *secret_key, size_t secret_key_len,
         goto cleanup;
     }
 
+    printf("Debug: Allocating shared secret\n");
     shared_secret = secure_malloc(kem->length_shared_secret);
     if (!shared_secret) {
         set_error("Error allocating memory");
         goto cleanup;
     }
 
-    // Decapsulate to get the shared secret
+    printf("Debug: Performing KEM decapsulation\n");
     if (OQS_KEM_decaps(kem, shared_secret, ciphertext, secret_key) != OQS_SUCCESS) {
         set_error("Error in KEM decapsulation");
         goto cleanup;
     }
 
-    // Extract IV and tag from ciphertext
+    printf("Debug: Extracting IV and tag\n");
     memcpy(iv, ciphertext + kem->length_ciphertext, GCM_IV_SIZE);
     memcpy(tag, ciphertext + ciphertext_len - GCM_TAG_SIZE, GCM_TAG_SIZE);
 
-    // Create and initialise the context
+    printf("Debug: Creating cipher context\n");
     if (!(ctx = EVP_CIPHER_CTX_new())) {
         set_error("Error creating cipher context");
         goto cleanup;
     }
 
-    // Initialise the decryption operation
+    printf("Debug: Initializing decryption\n");
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, shared_secret, iv) != 1) {
         set_error("Error initializing decryption");
         goto cleanup;
     }
 
-    // Set expected tag value
+    printf("Debug: Setting expected tag\n");
     if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, GCM_TAG_SIZE, (void*)tag) != 1) {
         set_error("Error setting tag");
         goto cleanup;
     }
 
-    // Allocate memory for plaintext
+    printf("Debug: Allocating memory for plaintext\n");
     size_t aes_ciphertext_len = ciphertext_len - kem->length_ciphertext - GCM_IV_SIZE - GCM_TAG_SIZE;
     *plaintext = secure_malloc(aes_ciphertext_len);
     if (!*plaintext) {
@@ -236,7 +242,7 @@ int decrypt(const uint8_t *secret_key, size_t secret_key_len,
         goto cleanup;
     }
 
-    // Decrypt ciphertext
+    printf("Debug: Decrypting ciphertext\n");
     if (EVP_DecryptUpdate(ctx, *plaintext, &len,
                           ciphertext + kem->length_ciphertext + GCM_IV_SIZE,
                           aes_ciphertext_len) != 1) {
@@ -245,7 +251,7 @@ int decrypt(const uint8_t *secret_key, size_t secret_key_len,
     }
     *plaintext_len = len;
 
-    // Finalize decryption
+    printf("Debug: Finalizing decryption\n");
     if (EVP_DecryptFinal_ex(ctx, *plaintext + len, &len) != 1) {
         set_error("Error finalizing decryption");
         goto cleanup;

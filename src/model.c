@@ -118,17 +118,19 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
         return NULL;
     }
 
-    // Read number of layers
+    printf("Debug: Secret key length: %zu\n", secret_key_len);
+    printf("Debug: Reading number of layers\n");
     if (fread(&model->num_layers, sizeof(size_t), 1, file) != 1) {
         set_error("Failed to read number of layers");
         free_model(model);
         fclose(file);
         return NULL;
     }
+    printf("Debug: Number of layers: %zu\n", model->num_layers);
 
-    // Read each layer
     for (size_t i = 0; i < model->num_layers; i++) {
         Layer* layer = &model->layers[i];
+        printf("Debug: Reading layer %zu dimensions\n", i);
         if (fread(&layer->rows, sizeof(size_t), 1, file) != 1 ||
             fread(&layer->cols, sizeof(size_t), 1, file) != 1) {
             set_error("Failed to read layer dimensions");
@@ -136,15 +138,17 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
             fclose(file);
             return NULL;
         }
+        printf("Debug: Layer %zu dimensions: %zu x %zu\n", i, layer->rows, layer->cols);
 
-        // Read encrypted weights
         size_t encrypted_weights_len;
+        printf("Debug: Reading encrypted weights length for layer %zu\n", i);
         if (fread(&encrypted_weights_len, sizeof(size_t), 1, file) != 1) {
             set_error("Failed to read encrypted weights length");
             free_model(model);
             fclose(file);
             return NULL;
         }
+        printf("Debug: Encrypted weights length for layer %zu: %zu\n", i, encrypted_weights_len);
 
         uint8_t* encrypted_weights = secure_malloc(encrypted_weights_len);
         if (!encrypted_weights) {
@@ -154,6 +158,7 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
             return NULL;
         }
 
+        printf("Debug: Reading encrypted weights for layer %zu\n", i);
         if (fread(encrypted_weights, 1, encrypted_weights_len, file) != encrypted_weights_len) {
             set_error("Failed to read encrypted weights");
             secure_free((void**)&encrypted_weights);
@@ -162,37 +167,41 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
             return NULL;
         }
 
-        // Decrypt weights
         uint8_t* decrypted_weights;
         size_t decrypted_weights_len;
+        printf("Debug: Decrypting weights for layer %zu (encrypted_weights_len: %zu)\n", i, encrypted_weights_len);
         if (decrypt(secret_key, secret_key_len, encrypted_weights, encrypted_weights_len,
                     &decrypted_weights, &decrypted_weights_len) != 0) {
             set_error("Failed to decrypt layer weights");
+            printf("Debug: Decryption error: %s\n", get_error());
             secure_free((void**)&encrypted_weights);
             free_model(model);
             fclose(file);
             return NULL;
         }
-
         secure_free((void**)&encrypted_weights);
 
-        layer->weights = (float*)decrypted_weights;
-        layer->is_secure_allocated = 1;  // Mark as secure allocated
+        printf("Debug: Decrypted weights length for layer %zu: %zu\n", i, decrypted_weights_len);
         if (decrypted_weights_len != layer->rows * layer->cols * sizeof(float)) {
             set_error("Decrypted weights size mismatch");
+            secure_free((void**)&decrypted_weights);
             free_model(model);
             fclose(file);
             return NULL;
         }
+
+        layer->weights = (float*)decrypted_weights;
+        layer->is_secure_allocated = 1;
     }
 
-    // Read public key
+    printf("Debug: Reading public key\n");
     if (fread(&model->public_key_len, sizeof(size_t), 1, file) != 1) {
         set_error("Failed to read public key length");
         free_model(model);
         fclose(file);
         return NULL;
     }
+    printf("Debug: Public key length: %zu\n", model->public_key_len);
 
     model->public_key = secure_malloc(model->public_key_len);
     if (!model->public_key) {
@@ -202,6 +211,7 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
         return NULL;
     }
 
+    printf("Debug: Reading public key data\n");
     if (fread(model->public_key, 1, model->public_key_len, file) != model->public_key_len) {
         set_error("Failed to read public key");
         free_model(model);
@@ -210,6 +220,7 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
     }
 
     fclose(file);
+    printf("Debug: Model loaded successfully\n");
     return model;
 }
 
@@ -268,20 +279,15 @@ int inference(const Model* model, const float* input, size_t input_size,
 
 void free_model(Model* model) {
     if (model) {
-        printf("Freeing model at %p\n", (void*)model);
         for (size_t i = 0; i < model->num_layers; i++) {
-            printf("Freeing layer %zu weights at %p\n", i, (void*)model->layers[i].weights);
             if (model->layers[i].weights) {
                 secure_free((void**)&model->layers[i].weights);
             }
         }
         if (model->public_key) {
-            printf("Freeing model public key at %p\n", (void*)model->public_key);
             secure_free((void**)&model->public_key);
         }
         secure_free((void**)&model);
-    } else {
-        printf("Attempted to free NULL model.\n");
     }
 }
 
