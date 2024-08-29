@@ -1,0 +1,4 @@
+* text=auto whitespace=trailing-space
+
+*.png binary
+*.jpe?g binary

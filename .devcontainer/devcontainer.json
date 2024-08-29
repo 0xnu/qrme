@@ -1,0 +1,15 @@
+{
+  "name": "C Development",
+  "image": "mcr.microsoft.com/devcontainers/cpp:1-debian-11",
+  "features": {
+    "ghcr.io/devcontainers/features/cpp:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-vscode.cpptools", "ms-vscode.cmake-tools"]
+    }
+  },
+  "forwardPorts": [8000],
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libopenblas-dev liblapack-dev",
+  "remoteUser": "vscode"
+}

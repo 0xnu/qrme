@@ -1,0 +1,18 @@
+# CMake & Testing
+/build*
+/tmp*
+
+# CLion
+/cmake-build*
+
+# MacOS
+.DS_Store
+
+# Others
+.venv
+__pycache__
+.pytest_cache
+.cache
+.CMake/a.out
+compile_commands.json
+scripts
