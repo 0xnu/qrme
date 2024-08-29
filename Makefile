@@ -56,13 +56,20 @@ else
 	$(shell sudo apt-get update && sudo apt-get install -y $(PACKAGES))
 endif
 
-all: create_sample_model test_all ## Build all targets
+all: qrme create_sample_model test_all ## Build all targets
+
+qrme: src/main.c $(OBJ) ## Build the main QRME executable
+	$(CC) $(CFLAGS) $(LIBOQS_INCLUDE) -o $@ $^ $(LIBOQS_LIB) $(LDFLAGS)
 
 create_sample_model: create_sample_model.c $(OBJ) ## Build the sample model creation tool
 	$(CC) $(CFLAGS) $(LIBOQS_INCLUDE) -o $@ $^ $(LIBOQS_LIB) $(LDFLAGS)
 
 test_all: $(TEST_SRC) $(OBJ) ## Build the test runner
 	$(CC) $(CFLAGS) $(LIBOQS_INCLUDE) -o $@ $^ $(LIBOQS_LIB) $(LDFLAGS)
+
+run: qrme create_sample_model ## Run the QRME
+	./create_sample_model
+	./qrme test_model.bin test_secret.key
 
 %.o: %.c ## Compile object files
 	$(CC) $(CFLAGS) $(LIBOQS_INCLUDE) -c $< -o $@
@@ -74,11 +81,11 @@ run-tests: test_all ## Run all tests
 	./test_all
 
 clean: ## Clean up build artifacts
-	rm -f $(OBJ) $(TEST_OBJ) create_sample_model test_all test_model.bin test_secret.key
+	rm -f $(OBJ) $(TEST_OBJ) qrme create_sample_model test_all test_model.bin test_secret.key
 
 help: ## Display help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-.PHONY: all run-sample run-tests clean help
+.PHONY: all run run-sample run-tests clean help
 
 .DEFAULT_GOAL := help

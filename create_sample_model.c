@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <oqs/oqs.h>
 #include "include/model.h"
 #include "include/encryption.h"
 #include "include/utils.h"
@@ -91,47 +92,55 @@ int main() {
     if (key_file == NULL) {
         fprintf(stderr, "Failed to create secret key file\n");
     } else {
-        fwrite(&secret_key_len, sizeof(size_t), 1, key_file);
-        fwrite(secret_key, 1, secret_key_len, key_file);
-        fclose(key_file);
-        printf("Secret key saved as %s\n", TEST_SECRET_KEY_FILE);
+        // Save only the actual key length, not including any potential padding
+        OQS_KEM *temp_kem = OQS_KEM_new(OQS_KEM_alg_kyber_768);
+        if (temp_kem == NULL) {
+            fprintf(stderr, "Failed to create KEM instance\n");
+            fclose(key_file);
+        } else {
+            size_t actual_key_len = temp_kem->length_secret_key;
+            fwrite(secret_key, 1, actual_key_len, key_file);
+            fclose(key_file);
+            printf("Secret key saved as %s (length: %zu)\n", TEST_SECRET_KEY_FILE, actual_key_len);
+            OQS_KEM_free(temp_kem);
+        }
     }
 
     // Test loading and inference
-    Model* loaded_model = load_model(TEST_MODEL_FILE, secret_key, secret_key_len);
-    printf("Loaded model at %p\n", (void*)loaded_model);
-    if (loaded_model == NULL) {
-        fprintf(stderr, "Failed to load model: %s\n", get_model_error());
-    } else {
-        printf("Successfully loaded the model.\n");
-
-        // Perform a test inference
-        float test_input[INPUT_SIZE] = {0.5f, -0.3f, 0.8f};
-        float test_output[OUTPUT_SIZE];
-
-        if (inference(loaded_model, test_input, INPUT_SIZE, test_output, OUTPUT_SIZE) == 0) {
-            printf("Test inference result: %f\n", test_output[0]);
+        Model* loaded_model = load_model(TEST_MODEL_FILE, secret_key, secret_key_len);
+        printf("Loaded model at %p\n", (void*)loaded_model);
+        if (loaded_model == NULL) {
+            fprintf(stderr, "Failed to load model: %s\n", get_model_error());
         } else {
-            fprintf(stderr, "Failed to perform inference: %s\n", get_model_error());
+            printf("Successfully loaded the model.\n");
+
+            // Perform a test inference
+            float test_input[INPUT_SIZE] = {0.5f, -0.3f, 0.8f};
+            float test_output[OUTPUT_SIZE];
+
+            if (inference(loaded_model, test_input, INPUT_SIZE, test_output, OUTPUT_SIZE) == 0) {
+                printf("Test inference result: %f\n", test_output[0]);
+            } else {
+                fprintf(stderr, "Failed to perform inference: %s\n", get_model_error());
+            }
+
+            printf("Freeing loaded model at %p\n", (void*)loaded_model);
+            free_model(loaded_model);
         }
 
-        printf("Freeing loaded model at %p\n", (void*)loaded_model);
-        free_model(loaded_model);
-    }
+        printf("Starting cleanup...\n");
 
-    printf("Starting cleanup...\n");
+        // Clean up
+        printf("Freeing original model at %p\n", (void*)model);
+        free_model(model);
+        printf("Cleaning up public key at %p\n", (void*)public_key);
+        cleanup(public_key);
+        printf("Cleaning up secret key at %p\n", (void*)secret_key);
+        cleanup(secret_key);
+        printf("Cleaning up encryption...\n");
+        cleanup_encryption();
 
-    // Clean up
-    printf("Freeing original model at %p\n", (void*)model);
-    free_model(model);
-    printf("Cleaning up public key at %p\n", (void*)public_key);
-    cleanup(public_key);
-    printf("Cleaning up secret key at %p\n", (void*)secret_key);
-    cleanup(secret_key);
-    printf("Cleaning up encryption...\n");
-    cleanup_encryption();
+        printf("Cleanup complete.\n");
 
-    printf("Cleanup complete.\n");
-
-    return 0;
+        return 0;
 }
