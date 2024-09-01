@@ -25,6 +25,15 @@ typedef struct Model {
 } Model;
 
 /**
+ * Securely reallocate memory for model operations
+ *
+ * @param ptr Pointer to the memory block to be reallocated
+ * @param size The new size of the memory block
+ * @return A pointer to the reallocated memory, or NULL on failure
+ */
+void* secure_realloc(void* ptr, size_t size);
+
+/**
  * Create a new empty model
  *
  * @return A pointer to the new Model, or NULL on failure

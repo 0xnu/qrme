@@ -53,9 +53,9 @@ int decrypt(const uint8_t *secret_key, size_t secret_key_len,
 /**
  * Clean up and free memory
  *
- * @param ptr Pointer to the memory to free
+ * @param ptr Pointer to the pointer of the memory to free
  */
-void cleanup(void *ptr);
+void cleanup(void **ptr);
 
 /**
  * Initialize the encryption module

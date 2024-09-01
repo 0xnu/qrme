@@ -26,16 +26,29 @@ typedef struct {
     char data[];
 } secure_alloc_t;
 
-void* secure_malloc(size_t size) {
-     secure_alloc_t* alloc = malloc(sizeof(secure_alloc_t) + size);
-     if (alloc) {
-         alloc->size = size;
-         memset(alloc->data, 0, size);
-         printf("secure_malloc: Allocated %zu bytes at %p (returned %p)\n", size, (void*)alloc, (void*)alloc->data);
-         return alloc->data;
-     }
-     set_utils_error("Failed to allocate memory");
-     return NULL;
+void* secure_realloc(void* ptr, size_t size) {
+    if (ptr == NULL) {
+        secure_alloc_t* alloc = realloc(NULL, sizeof(secure_alloc_t) + size);
+        if (alloc) {
+            alloc->size = size;
+            memset(alloc->data, 0, size);
+            printf("secure_realloc: Allocated %zu bytes at %p (returned %p)\n", size, (void*)alloc, (void*)alloc->data);
+            return alloc->data;
+        }
+    } else {
+        secure_alloc_t* old_alloc = (secure_alloc_t*)((char*)ptr - offsetof(secure_alloc_t, data));
+        secure_alloc_t* new_alloc = realloc(old_alloc, sizeof(secure_alloc_t) + size);
+        if (new_alloc) {
+            if (size > new_alloc->size) {
+                memset((char*)new_alloc->data + new_alloc->size, 0, size - new_alloc->size);
+            }
+            new_alloc->size = size;
+            printf("secure_realloc: Reallocated %zu bytes at %p (returned %p)\n", size, (void*)new_alloc, (void*)new_alloc->data);
+            return new_alloc->data;
+        }
+    }
+    set_utils_error("Failed to allocate memory");
+    return NULL;
 }
 
 void secure_free(void** ptr) {
@@ -72,7 +85,7 @@ void secure_free(void** ptr) {
 int float_to_byte_array(const float* float_array, size_t float_array_len,
                         uint8_t** byte_array, size_t* byte_array_len) {
     *byte_array_len = float_array_len * sizeof(float);
-    *byte_array = secure_malloc(*byte_array_len);
+    *byte_array = secure_realloc(NULL, *byte_array_len);
     if (!*byte_array) {
         set_utils_error("Failed to allocate memory for byte array");
         return -1;
@@ -88,7 +101,7 @@ int byte_to_float_array(const uint8_t* byte_array, size_t byte_array_len,
         return -1;
     }
     *float_array_len = byte_array_len / sizeof(float);
-    *float_array = secure_malloc(byte_array_len);
+    *float_array = secure_realloc(NULL, byte_array_len);
     if (!*float_array) {
         set_utils_error("Failed to allocate memory for float array");
         return -1;
@@ -98,7 +111,7 @@ int byte_to_float_array(const uint8_t* byte_array, size_t byte_array_len,
 }
 
 float* generate_random_float_array(size_t len, float min, float max) {
-    float* array = (float*)secure_malloc(len * sizeof(float));
+    float* array = (float*)secure_realloc(NULL, len * sizeof(float));
     if (!array) {
         set_utils_error("Failed to allocate memory for random float array");
         return NULL;
@@ -216,7 +229,7 @@ int load_float_array(const char* filename, float** array, size_t* len) {
     }
 
     *len = file_size / sizeof(float);
-    *array = secure_malloc(file_size);
+    *array = secure_realloc(NULL, file_size);
     if (!*array) {
         set_utils_error("Failed to allocate memory for loaded array");
         fclose(file);

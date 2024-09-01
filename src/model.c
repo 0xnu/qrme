@@ -19,12 +19,13 @@ const char* get_model_error(void) {
 }
 
 Model* create_model(void) {
-    Model* model = secure_malloc(sizeof(Model));
+    Model* model = secure_realloc(NULL, sizeof(Model));
     if (!model) {
         set_error("Failed to allocate memory for model");
         return NULL;
     }
     memset(model, 0, sizeof(Model));
+    printf("Debug: Created model at %p\n", (void*)model);
     return model;
 }
 
@@ -39,7 +40,7 @@ int add_layer(Model* model, const float* weights, size_t rows, size_t cols) {
     }
 
     Layer* layer = &model->layers[model->num_layers];
-    layer->weights = secure_malloc(rows * cols * sizeof(float));
+    layer->weights = secure_realloc(NULL, rows * cols * sizeof(float));
     if (!layer->weights) {
         set_error("Failed to allocate memory for layer weights");
         return -1;
@@ -51,6 +52,8 @@ int add_layer(Model* model, const float* weights, size_t rows, size_t cols) {
     layer->is_secure_allocated = 1;
     model->num_layers++;
 
+    printf("Debug: Added layer %zu to model at %p, weights at %p\n",
+           model->num_layers - 1, (void*)model, (void*)layer->weights);
     return 0;
 }
 
@@ -118,6 +121,7 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
         return NULL;
     }
 
+    printf("Debug: Created model at %p during load_model\n", (void*)model);
     printf("Debug: Secret key length: %zu\n", secret_key_len);
     printf("Debug: Reading number of layers\n");
     if (fread(&model->num_layers, sizeof(size_t), 1, file) != 1) {
@@ -150,7 +154,7 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
         }
         printf("Debug: Encrypted weights length for layer %zu: %zu\n", i, encrypted_weights_len);
 
-        uint8_t* encrypted_weights = secure_malloc(encrypted_weights_len);
+        uint8_t* encrypted_weights = secure_realloc(NULL, encrypted_weights_len);
         if (!encrypted_weights) {
             set_error("Failed to allocate memory for encrypted weights");
             free_model(model);
@@ -194,16 +198,17 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
         layer->is_secure_allocated = 1;
     }
 
-    printf("Debug: Reading public key\n");
-    if (fread(&model->public_key_len, sizeof(size_t), 1, file) != 1) {
+    // Read public key
+    size_t public_key_len;
+    if (fread(&public_key_len, sizeof(size_t), 1, file) != 1) {
         set_error("Failed to read public key length");
         free_model(model);
         fclose(file);
         return NULL;
     }
-    printf("Debug: Public key length: %zu\n", model->public_key_len);
+    printf("Debug: Public key length: %zu\n", public_key_len);
 
-    model->public_key = secure_malloc(model->public_key_len);
+    model->public_key = secure_realloc(NULL, public_key_len);
     if (!model->public_key) {
         set_error("Failed to allocate memory for public key");
         free_model(model);
@@ -211,16 +216,17 @@ Model* load_model(const char* filename, const uint8_t* secret_key, size_t secret
         return NULL;
     }
 
-    printf("Debug: Reading public key data\n");
-    if (fread(model->public_key, 1, model->public_key_len, file) != model->public_key_len) {
+    if (fread(model->public_key, 1, public_key_len, file) != public_key_len) {
         set_error("Failed to read public key");
         free_model(model);
         fclose(file);
         return NULL;
     }
+    model->public_key_len = public_key_len;
+    printf("Debug: Public key loaded successfully\n");
 
     fclose(file);
-    printf("Debug: Model loaded successfully\n");
+    printf("Debug: Model loaded and decrypted successfully\n");
     return model;
 }
 
@@ -230,6 +236,11 @@ int inference(const Model* model, const float* input, size_t input_size,
         set_error("Invalid parameters for inference");
         return -1;
     }
+
+    printf("Debug: Model public key length: %zu\n", model->public_key_len);
+    printf("Debug: Model has %zu layers\n", model->num_layers);
+    printf("Debug: Input size: %zu, Expected input size: %zu\n", input_size, model->layers[0].cols);
+    printf("Debug: Output size: %zu, Expected output size: %zu\n", output_size, model->layers[model->num_layers - 1].rows);
 
     if (model->num_layers == 0) {
         set_error("Model has no layers");
@@ -246,8 +257,8 @@ int inference(const Model* model, const float* input, size_t input_size,
         return -1;
     }
 
-    float* temp_input = (float*)secure_malloc(input_size * sizeof(float));
-    float* temp_output = (float*)secure_malloc(output_size * sizeof(float));
+    float* temp_input = secure_realloc(NULL, input_size * sizeof(float));
+    float* temp_output = secure_realloc(NULL, output_size * sizeof(float));
     if (!temp_input || !temp_output) {
         set_error("Failed to allocate memory for temporary buffers");
         secure_free((void**)&temp_input);
@@ -259,6 +270,8 @@ int inference(const Model* model, const float* input, size_t input_size,
 
     for (size_t i = 0; i < model->num_layers; i++) {
         const Layer* layer = &model->layers[i];
+        printf("Debug: Processing layer %zu (%zu x %zu)\n", i, layer->rows, layer->cols);
+
         for (size_t j = 0; j < layer->rows; j++) {
             float sum = 0;
             for (size_t k = 0; k < layer->cols; k++) {
@@ -266,6 +279,11 @@ int inference(const Model* model, const float* input, size_t input_size,
             }
             temp_output[j] = (sum > 0) ? sum : 0;  // ReLU activation
         }
+
+        // Print intermediate results for debugging
+        printf("Debug: Layer %zu output:\n", i);
+        print_float_array(temp_output, layer->rows, "Layer output");
+
         memcpy(temp_input, temp_output, layer->rows * sizeof(float));
     }
 
@@ -279,15 +297,22 @@ int inference(const Model* model, const float* input, size_t input_size,
 
 void free_model(Model* model) {
     if (model) {
+        printf("Debug: Freeing model at %p\n", (void*)model);
         for (size_t i = 0; i < model->num_layers; i++) {
-            if (model->layers[i].weights) {
+            if (model->layers[i].is_secure_allocated) {
+                printf("Debug: Freeing layer %zu weights at %p\n", i, (void*)model->layers[i].weights);
                 secure_free((void**)&model->layers[i].weights);
+            } else {
+                printf("Debug: Freeing layer %zu weights at %p (non-secure)\n", i, (void*)model->layers[i].weights);
+                free(model->layers[i].weights);
             }
         }
         if (model->public_key) {
+            printf("Debug: Freeing public key at %p\n", (void*)model->public_key);
             secure_free((void**)&model->public_key);
         }
         secure_free((void**)&model);
+        printf("Debug: Model freed\n");
     }
 }
 

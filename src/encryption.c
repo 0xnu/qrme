@@ -16,11 +16,6 @@
 // Global error state
 static char error_message[MAX_ERROR_LENGTH] = {0};
 
-typedef struct {
-    size_t size;
-    char data[];
-} secure_alloc_t;
-
 // Function to set error message
 static void set_error(const char* message) {
     strncpy(error_message, message, MAX_ERROR_LENGTH - 1);
@@ -43,8 +38,8 @@ int generate_keypair(uint8_t **public_key, size_t *public_key_len,
         return ret;
     }
 
-    *public_key = secure_malloc(kem->length_public_key);
-    *secret_key = secure_malloc(kem->length_secret_key);
+    *public_key = secure_realloc(NULL, kem->length_public_key);
+    *secret_key = secure_realloc(NULL, kem->length_secret_key);
 
     if (!*public_key || !*secret_key) {
         set_error("Error allocating memory for keys");
@@ -94,9 +89,9 @@ int encrypt(const uint8_t *public_key, size_t public_key_len,
         goto cleanup;
     }
 
-    kem_ciphertext = secure_malloc(kem->length_ciphertext);
-    shared_secret = secure_malloc(kem->length_shared_secret);
-    aes_ciphertext = secure_malloc(plaintext_len + EVP_MAX_BLOCK_LENGTH);
+    kem_ciphertext = secure_realloc(NULL, kem->length_ciphertext);
+    shared_secret = secure_realloc(NULL, kem->length_shared_secret);
+    aes_ciphertext = secure_realloc(NULL, plaintext_len + EVP_MAX_BLOCK_LENGTH);
 
     if (!kem_ciphertext || !shared_secret || !aes_ciphertext) {
         set_error("Error allocating memory");
@@ -148,7 +143,7 @@ int encrypt(const uint8_t *public_key, size_t public_key_len,
 
     // Assemble final ciphertext: KEM ciphertext + IV + AES ciphertext + tag
     *ciphertext_len = kem->length_ciphertext + GCM_IV_SIZE + aes_ciphertext_len + GCM_TAG_SIZE;
-    *ciphertext = secure_malloc(*ciphertext_len);
+    *ciphertext = secure_realloc(NULL, *ciphertext_len);
     if (!*ciphertext) {
         set_error("Error allocating memory for final ciphertext");
         goto cleanup;
@@ -200,7 +195,7 @@ int decrypt(const uint8_t *secret_key, size_t secret_key_len,
     }
 
     printf("Debug: Allocating shared secret\n");
-    shared_secret = secure_malloc(kem->length_shared_secret);
+    shared_secret = secure_realloc(NULL, kem->length_shared_secret);
     if (!shared_secret) {
         set_error("Error allocating memory");
         goto cleanup;
@@ -236,7 +231,7 @@ int decrypt(const uint8_t *secret_key, size_t secret_key_len,
 
     printf("Debug: Allocating memory for plaintext\n");
     size_t aes_ciphertext_len = ciphertext_len - kem->length_ciphertext - GCM_IV_SIZE - GCM_TAG_SIZE;
-    *plaintext = secure_malloc(aes_ciphertext_len);
+    *plaintext = secure_realloc(NULL, aes_ciphertext_len);
     if (!*plaintext) {
         set_error("Error allocating memory for plaintext");
         goto cleanup;
@@ -270,17 +265,9 @@ cleanup:
     return ret;
 }
 
-void cleanup(void *ptr) {
-    if (ptr) {
-        // Check if the pointer was allocated by our secure_malloc
-        secure_alloc_t* alloc = (secure_alloc_t*)((char*)ptr - offsetof(secure_alloc_t, data));
-        if (alloc->size > 0) {
-            // This was allocated by our secure_malloc, so use secure_free
-            secure_free(&ptr);
-        } else {
-            // This was likely allocated by the OQS library, so use regular free
-            free(ptr);
-        }
+void cleanup(void **ptr) {
+    if (ptr && *ptr) {
+        secure_free(ptr);
     }
 }
 
