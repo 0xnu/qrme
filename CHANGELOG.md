@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.4 - 2024-09-01 - @0xnu
+
+* Refinements: test_all.c
+
 ## 0.0.3 - 2024-09-01 - @0xnu
 
 * Refinements: malloc -> realloc
