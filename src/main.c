@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
     fseek(key_file, 0, SEEK_END);
     secret_key_len = ftell(key_file);
     fseek(key_file, 0, SEEK_SET);
-    secret_key = malloc(secret_key_len);
+    secret_key = secure_realloc(NULL, secret_key_len);
     if (!secret_key || fread(secret_key, 1, secret_key_len, key_file) != secret_key_len) {
         fprintf(stderr, "Error: Unable to read secret key.\n");
         fclose(key_file);
@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
     Model* model = load_model(model_file, secret_key, secret_key_len);
     if (!model) {
         fprintf(stderr, "Error: %s\n", get_model_error());
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
     if (get_model_public_key(model, &public_key, &public_key_len) != 0) {
         fprintf(stderr, "Error: Unable to get model's public key.\n");
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
@@ -67,7 +67,7 @@ int main(int argc, char* argv[]) {
     if (!input) {
         fprintf(stderr, "Error: %s\n", get_utils_error());
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
@@ -79,9 +79,9 @@ int main(int argc, char* argv[]) {
     size_t input_bytes_len;
     if (float_to_byte_array(input, INPUT_SIZE, &input_bytes, &input_bytes_len) != 0) {
         fprintf(stderr, "Error: %s\n", get_utils_error());
-        free(input);
+        secure_free((void**)&input);
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
@@ -89,65 +89,65 @@ int main(int argc, char* argv[]) {
     size_t encrypted_input_len;
     if (encrypt(public_key, public_key_len, input_bytes, input_bytes_len, &encrypted_input, &encrypted_input_len) != 0) {
         fprintf(stderr, "Error: %s\n", get_error());
-        free(input_bytes);
-        free(input);
+        secure_free((void**)&input_bytes);
+        secure_free((void**)&input);
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
-    free(input_bytes);
+    secure_free((void**)&input_bytes);
 
     // Decrypt the input (simulating what would happen on the server)
     uint8_t* decrypted_input;
     size_t decrypted_input_len;
     if (decrypt(secret_key, secret_key_len, encrypted_input, encrypted_input_len, &decrypted_input, &decrypted_input_len) != 0) {
         fprintf(stderr, "Error: %s\n", get_error());
-        free(encrypted_input);
-        free(input);
+        secure_free((void**)&encrypted_input);
+        secure_free((void**)&input);
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
-    free(encrypted_input);
+    secure_free((void**)&encrypted_input);
 
     // Convert decrypted input back to float array
     float* decrypted_input_float;
     size_t decrypted_input_float_len;
     if (byte_to_float_array(decrypted_input, decrypted_input_len, &decrypted_input_float, &decrypted_input_float_len) != 0) {
         fprintf(stderr, "Error: %s\n", get_utils_error());
-        free(decrypted_input);
-        free(input);
+        secure_free((void**)&decrypted_input);
+        secure_free((void**)&input);
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
-    free(decrypted_input);
+    secure_free((void**)&decrypted_input);
 
     // Perform inference
-    float* output = malloc(OUTPUT_SIZE * sizeof(float));
+    float* output = secure_realloc(NULL, OUTPUT_SIZE * sizeof(float));
     if (!output) {
         fprintf(stderr, "Error: Unable to allocate memory for output.\n");
-        free(decrypted_input_float);
-        free(input);
+        secure_free((void**)&decrypted_input_float);
+        secure_free((void**)&input);
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
     if (inference(model, decrypted_input_float, INPUT_SIZE, output, OUTPUT_SIZE) != 0) {
         fprintf(stderr, "Error: %s\n", get_model_error());
-        free(output);
-        free(decrypted_input_float);
-        free(input);
+        secure_free((void**)&output);
+        secure_free((void**)&decrypted_input_float);
+        secure_free((void**)&input);
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
-    free(decrypted_input_float);
+    secure_free((void**)&decrypted_input_float);
 
     // Print the output
     printf("Model output:\n");
@@ -170,10 +170,10 @@ int main(int argc, char* argv[]) {
     size_t output_bytes_len;
     if (float_to_byte_array(output, OUTPUT_SIZE, &output_bytes, &output_bytes_len) != 0) {
         fprintf(stderr, "Error: %s\n", get_utils_error());
-        free(output);
-        free(input);
+        secure_free((void**)&output);
+        secure_free((void**)&input);
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
@@ -181,24 +181,24 @@ int main(int argc, char* argv[]) {
     size_t encrypted_output_len;
     if (encrypt(public_key, public_key_len, output_bytes, output_bytes_len, &encrypted_output, &encrypted_output_len) != 0) {
         fprintf(stderr, "Error: %s\n", get_error());
-        free(output_bytes);
-        free(output);
-        free(input);
+        secure_free((void**)&output_bytes);
+        secure_free((void**)&output);
+        secure_free((void**)&input);
         free_model(model);
-        free(secret_key);
+        secure_free((void**)&secret_key);
         return 1;
     }
 
-    free(output_bytes);
+    secure_free((void**)&output_bytes);
 
     printf("Encrypted output length: %zu bytes\n", encrypted_output_len);
 
     // Clean up
-    free(encrypted_output);
-    free(output);
-    free(input);
+    secure_free((void**)&encrypted_output);
+    secure_free((void**)&output);
+    secure_free((void**)&input);
     free_model(model);
-    free(secret_key);
+    secure_free((void**)&secret_key);
 
     // Clean up the encryption and utility modules
     cleanup_encryption();

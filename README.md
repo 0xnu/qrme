@@ -33,10 +33,10 @@ This project is licensed under the [BSD 3-Clause](LICENSE) License.
   author       = {Oketunji, A.F.},
   title        = {Quantum-Resistant Model Encryption (QRME)},
   year         = 2024,
-  version      = {0.0.1},
+  version      = {0.0.3},
   publisher    = {Zenodo},
-  doi          = {10.5281/zenodo.13449375},
-  url          = {https://doi.org/10.5281/zenodo.13449375}
+  doi          = {10.5281/zenodo.13624187},
+  url          = {https://doi.org/10.5281/zenodo.13624187}
 }
 ```
 
